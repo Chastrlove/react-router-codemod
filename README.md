@@ -34,7 +34,7 @@ Replace deprecated `useHistory`:
 
   function App() {
 - const history = useHistory();
-- const navigate = useNavigate();
++ const navigate = useNavigate();
 
   return (
     <>
@@ -56,7 +56,7 @@ Replace deprecated `useHistory`:
 }
 ```
 
-### Attention!!!. It don't resolve the second reference,it will add some comments `fixme` for helping user to fix 
+It don't resolve the second reference,it will add some comments `fixme` for helping user to fix 
 
 ## License
 
