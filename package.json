@@ -1,6 +1,6 @@
 {
   "name": "react-router-codemod",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "dependencies": {
     "jscodeshift": "^0.13.1",
     "chalk": "4.1.0",
@@ -19,6 +19,7 @@
   "files": [
     "transforms/*.js",
     "bin/*.js",
+    "bin/codemod.ignore",
     "utils/*.js"
   ],
   "scripts": {
