@@ -1,5 +1,6 @@
 {
   "name": "react-router-codemod",
+  "version": "0.0.2",
   "dependencies": {
     "jscodeshift": "^0.13.1",
     "chalk": "4.1.0",
@@ -12,14 +13,17 @@
     "meow": "7.0.1",
     "ast-types": "^0.14.2"
   },
+  "bin": {
+    "react-router-codemod": "./bin/react-router-codemod.js"
+  },
   "files": [
     "transforms/*.js",
     "bin/*.js",
     "utils/*.js"
   ],
   "scripts": {
-    "build": "tsc -d -p tsconfig.json",
-    "dev": "tsc -d -w -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -w -p tsconfig.json",
     "clean": "tsc --build --clean",
     "run": "esno bin/react-router-codemod.ts",
     "test": "jest"
