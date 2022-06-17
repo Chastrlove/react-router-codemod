@@ -1,0 +1,33 @@
+{
+  "name": "react-router-codemod",
+  "dependencies": {
+    "jscodeshift": "^0.13.1",
+    "chalk": "4.1.0",
+    "cheerio": "1.0.0-rc.9",
+    "execa": "4.0.3",
+    "globby": "11.0.1",
+    "inquirer": "7.3.3",
+    "typescript": "^4.7.2",
+    "is-git-clean": "1.1.0",
+    "meow": "7.0.1",
+    "ast-types": "^0.14.2"
+  },
+  "files": [
+    "transforms/*.js",
+    "bin/*.js",
+    "utils/*.js"
+  ],
+  "scripts": {
+    "build": "tsc -d -p tsconfig.json",
+    "dev": "tsc -d -w -p tsconfig.json",
+    "clean": "tsc --build --clean",
+    "run": "esno bin/react-router-codemod.ts",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "esno": "^0.16.3",
+    "jest": "^28.1.1",
+    "@types/node": "^17.0.0",
+    "@types/jscodeshift": "0.11.0"
+  }
+}

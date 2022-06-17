@@ -1,0 +1,10 @@
+node_modules
+*.css
+*.json
+*.less
+*.sass
+*.scss
+*.d.ts
+.next
+build
+dist
