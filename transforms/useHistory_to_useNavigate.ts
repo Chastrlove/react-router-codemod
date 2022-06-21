@@ -1,30 +1,31 @@
-import { API, FileInfo, Options } from "jscodeshift";
-import { hasModuleImport, hasModuleNamespaceImport, submoduleImport } from "../utils";
-import { ExpressionKind } from "ast-types/gen/kinds";
+import { API, ASTPath, FileInfo, Options } from "jscodeshift"
+import { hasModuleImport, hasModuleNamespaceImport, submoduleImport } from "../utils"
+import { ExpressionKind } from "ast-types/gen/kinds"
+import { namedTypes } from "ast-types"
 
 export default function transformer(file: FileInfo, api: API, options: Options) {
-  const j = api.jscodeshift;
-  const root = j(file.source);
+  const j = api.jscodeshift
+  const root = j(file.source)
 
-  const hasRouterImport = hasModuleImport(j, root, "react-router-dom");
+  const hasRouterImport = hasModuleImport(j, root, "react-router-dom")
   if (!hasRouterImport) {
-    return;
+    return
   }
 
-  const fnName = "useHistory";
-  const newFnName = "useNavigate";
+  const fnName = "useHistory"
+  const newFnName = "useNavigate"
 
   const addCommentBlock = (path) => {
-    const comment = j.commentLine("fixme 需手动binding", true, false);
-    const comments = (path.node.comments = path.node.comments || []);
-    comments.push(comment);
-  };
+    const comment = j.commentLine("fixme binding by yourself", true, false)
+    const comments = (path.node.comments = path.node.comments || [])
+    comments.push(comment)
+  }
 
   const addComment = (path) => {
-    const comment = j.commentLine("fixme 间接引用暂不支持，请手动处理", true, false);
-    const comments = (path.parentPath.node.comments = path.parentPath.node.comments || []);
-    comments.push(comment);
-  };
+    const comment = j.commentLine("fixme don't support", true, false)
+    const comments = (path.parentPath.node.comments = path.parentPath.node.comments || [])
+    comments.push(comment)
+  }
 
   const indirectReference = (name) => {
     root
@@ -34,8 +35,8 @@ export default function transformer(file: FileInfo, api: API, options: Options) 
         },
       })
       .forEach((path) => {
-        addComment(path);
-      });
+        addComment(path)
+      })
 
     root
       .find(j.AssignmentExpression, {
@@ -44,9 +45,9 @@ export default function transformer(file: FileInfo, api: API, options: Options) 
         },
       })
       .forEach((path) => {
-        addComment(path);
-      });
-  };
+        addComment(path)
+      })
+  }
 
   const actionsResolve = (actionName, nodePath) => {
     switch (actionName) {
@@ -58,17 +59,15 @@ export default function transformer(file: FileInfo, api: API, options: Options) 
               ? j.unaryExpression("-", j.numericLiteral(1))
               : j.numericLiteral(1),
           ]),
-        );
-        break;
+        )
+        break
       case "go":
-        j(nodePath).replaceWith(
-          j.callExpression(j.identifier("navigate"), nodePath.node.arguments),
-        );
-        break;
+        j(nodePath).replaceWith(j.callExpression(j.identifier("navigate"), nodePath.node.arguments))
+        break
       case "replace":
         const replace_args = nodePath.node.arguments.filter(
           (arg) => arg.type !== "SpreadElement",
-        ) as ExpressionKind[];
+        ) as ExpressionKind[]
         j(nodePath).replaceWith(
           j.callExpression(j.identifier("navigate"), [
             replace_args[0],
@@ -79,12 +78,12 @@ export default function transformer(file: FileInfo, api: API, options: Options) 
               ].filter(Boolean),
             ),
           ]),
-        );
-        break;
+        )
+        break
       case "push":
         const args = nodePath.node.arguments.filter(
           (arg) => arg.type !== "SpreadElement",
-        ) as ExpressionKind[];
+        ) as ExpressionKind[]
         j(nodePath).replaceWith(
           j.callExpression(
             j.identifier("navigate"),
@@ -94,11 +93,62 @@ export default function transformer(file: FileInfo, api: API, options: Options) 
                 j.objectExpression([j.objectProperty(j.identifier("state"), args.at(1))]),
             ].filter(Boolean),
           ),
-        );
+        )
     }
-  };
+  }
 
-  const resolveVariableDeclarator = (path) => {
+  let useCallbacks = {
+    //useCallbacks once enough
+    dirty: false,
+    value: undefined,
+  }
+
+  const findUseCallback = () => {
+    if (useCallbacks.dirty === false) {
+      useCallbacks.value = root.find(j.CallExpression, (callExp) => {
+        //React.useCallback(callback, deps)
+        if (
+          callExp.callee.type === "MemberExpression" &&
+          callExp.callee.property.name === "useCallback"
+        ) {
+          return true
+        }
+        //useCallback(callback, deps)
+        if (callExp.callee.type === "Identifier" && callExp.callee.name === "useCallback") {
+          return true
+        }
+        return false
+      })
+    }
+    return useCallbacks.value
+  }
+
+  const resolveUseCallbackDep = (inUseCallback, depName) => {
+    findUseCallback().forEach((nodePath) => {
+      const args = nodePath.node.arguments
+      const fn = args[0]
+      const deps = args[1]
+      if (inUseCallback(fn) && deps) {
+        if (deps.type === "ArrayExpression") {
+          const newEle = []
+          deps.elements.forEach((ele) => {
+            if (ele.type === "Identifier" && ele.name === depName) {
+              newEle.push(j.identifier("navigate"))
+            } else {
+              newEle.push(ele)
+            }
+          })
+          j(nodePath)
+            .find(j.ArrayExpression, (value) => {
+              return value === deps
+            })
+            .replaceWith(j.arrayExpression(newEle))
+        }
+      }
+    })
+  }
+
+  const resolveVariableDeclarator = (path: ASTPath<namedTypes.VariableDeclarator>) => {
     if (path.node.id.type === "Identifier") {
       //demo const history = useHistory();
       root
@@ -110,19 +160,30 @@ export default function transformer(file: FileInfo, api: API, options: Options) 
         })
         .forEach((path) => {
           if (path.parentPath.node.type !== "CallExpression") {
-            addCommentBlock(path);
+            addCommentBlock(path)
           } else {
+            const memberExp = path.node
+            resolveUseCallbackDep(
+              (fn) => {
+                return (
+                  j(fn).find(j.CallExpression, (value) => {
+                    return value === path.parentPath.node
+                  }).length > 0
+                )
+              },
+              "name" in memberExp.object ? memberExp.object.name : undefined,
+            )
             if (path.node.property.type === "Identifier") {
-              actionsResolve(path.node.property.name, path.parentPath);
+              actionsResolve(path.node.property.name, path.parentPath)
             }
           }
-        });
+        })
     } else {
       //demo const { go,goBack,push,replace,goForward } = useHistory();
       j(path)
         .find(j.ObjectProperty)
         .forEach((propertyPath) => {
-          const { key, value } = propertyPath.node;
+          const { key, value } = propertyPath.node
           if (key.type === "Identifier" && value.type === "Identifier") {
             const withPreAction = (afterAction) => {
               root
@@ -130,25 +191,35 @@ export default function transformer(file: FileInfo, api: API, options: Options) 
                   name: value.name,
                 })
                 .forEach((nodePath) => {
-                  const parentPath = nodePath.parentPath;
+                  const parentPath = nodePath.parentPath
                   if (parentPath.node === propertyPath.node) {
-                    return;
+                    return
                   }
                   if (parentPath.node.type !== "CallExpression") {
-                    addCommentBlock(nodePath);
+                    addCommentBlock(nodePath)
                   } else {
-                    afterAction(parentPath);
+                    resolveUseCallbackDep(
+                      (fn) => {
+                        return (
+                          j(fn).find(j.CallExpression, (value) => {
+                            return value === parentPath.node
+                          }).length > 0
+                        )
+                      },
+                      value.name
+                    )
+                    afterAction(parentPath)
                   }
-                });
-            };
-            withPreAction(actionsResolve.bind(null, key.name));
+                })
+            }
+            withPreAction(actionsResolve.bind(null, key.name))
           }
-        });
+        })
     }
-  };
+  }
 
   hasModuleNamespaceImport(j, root, "react-router-dom", (defaultSpec) => {
-    const name = defaultSpec.local.name;
+    const name = defaultSpec.local.name
     root
       .find(j.VariableDeclarator, {
         init: {
@@ -161,24 +232,24 @@ export default function transformer(file: FileInfo, api: API, options: Options) 
         },
       })
       .forEach((path) => {
-        resolveVariableDeclarator(path);
+        resolveVariableDeclarator(path)
         j(path).replaceWith(
           j.variableDeclarator(
             j.identifier("navigate"),
             j.callExpression(j.memberExpression(j.identifier(name), j.identifier(newFnName)), []),
           ),
-        );
-      });
+        )
+      })
 
-    indirectReference(name);
-  });
+    indirectReference(name)
+  })
 
   submoduleImport(j, root, "react-router-dom", fnName).forEach((importSpecifierNodePath) => {
-    const importSpecifier = importSpecifierNodePath.node;
-    const localName = importSpecifier.local.name;
+    const importSpecifier = importSpecifierNodePath.node
+    const localName = importSpecifier.local.name
     j(importSpecifierNodePath)
       .find(j.Identifier, { name: fnName })
-      .forEach((nodePath) => j(nodePath).replaceWith(j.identifier(newFnName)));
+      .forEach((nodePath) => j(nodePath).replaceWith(j.identifier(newFnName)))
     if (localName === fnName) {
       root
         .find(j.VariableDeclarator, {
@@ -190,17 +261,17 @@ export default function transformer(file: FileInfo, api: API, options: Options) 
           },
         })
         .forEach((path) => {
-          resolveVariableDeclarator(path);
+          resolveVariableDeclarator(path)
           j(path).replaceWith(
             j.variableDeclarator(
               j.identifier("navigate"),
               j.callExpression(j.identifier(newFnName), []),
             ),
-          );
-        });
+          )
+        })
     }
-    indirectReference(localName);
-  });
+    indirectReference(localName)
+  })
 
-  return root.toSource(options);
+  return root.toSource(options)
 }
